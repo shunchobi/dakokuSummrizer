@@ -64,6 +64,7 @@ type Data = {
 const names = ref<string[]>([]);
 const data = ref<Data>({})
 
+// サンプルデータ
 // 2024年11月29日	近藤駿一		19:43	"recog
 // "
 // 2024年12月02日	近藤駿一	9:49		
@@ -94,6 +95,7 @@ const handleChangeTextarea = (e: Event) => {
     }
   }
   
+  // 日付ごとにデータを整形
   const _lines = __lines.map((line) => {
     const data = line.split('\t');
     const date = new Date(data[0].replace('年', '-').replace('月', '-').replace('日', ''));
@@ -112,11 +114,13 @@ const handleChangeTextarea = (e: Event) => {
 
   names.value = Array.from(new Set(_lines.map((line) => line.name)));
 
+  // 日付の範囲を取得
   // generate dates from min to max
   const minDate = new Date(Math.min(..._lines.map((line) => line.date.getTime())));
   const maxDate = new Date(Math.max(..._lines.map((line) => line.date.getTime())));
   const datesArray = generateDateStrRange(getFormattedDate(minDate), getFormattedDate(maxDate));
 
+  // 抜け日のデータを埋める
   // arrenge lines for filling empty data
   const lines = datesArray.map((date) => {
     const sameDateLines = _lines.filter((line) => getFormattedDate(line.date) === date);
@@ -142,17 +146,7 @@ const handleChangeTextarea = (e: Event) => {
     });
   }).flat();
 
-  // sep by tab
-  // head1 head2 head3 head4 head5 (head1=date, head2=name, head3=inTime, head4=outTime, head5=note)
-  // 2025年1月14日	勝田麻美		18:06	
-  // 2025年1月14日	萌々子清水萌々子		19:00	
-  // 2025年1月14日	近藤駿一		19:06	
-  // 2025年1月14日	三井健史		19:10	
-  // 2025年1月14日	寺川晃司		19:19	
-  // 2025年1月15日	勝田麻美	9:04		フォームのエラーで打刻遅れました
-  // 2025年1月15日	三井健史	9:19		
-  // 2025年1月15日	萌々子清水萌々子	9:51		
-
+  // 日付ごとにデータを表示するために整形
   lines.forEach((line) => {
     const date = line.date;
     const name = line.name;
