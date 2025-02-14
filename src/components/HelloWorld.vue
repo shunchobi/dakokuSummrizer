@@ -23,7 +23,6 @@
         <tr style="border-top: 1px solid #000;">
           <th rowspan="2">{{ date }}</th>
           <template v-for="name in names" :key="name">
-            <!-- <td :style="{ backgroundColor: data[date][name] ? 'white' : 'red' }"> -->
             <td>
               <span>{{ data[date][name]?.inTime ?? "---" }}</span>
             </td>
@@ -43,15 +42,6 @@
           </template>
         </tr>
       </template>
-      <!-- <tr>
-        <th rowspan="2">2025年1月28日</th>
-        <td style="border-bottom: 1px dotted;"><span>出勤時間</span></td>
-        <td style="border-bottom: 1px dotted;"><span>出勤理由</span></td>
-      </tr>
-      <tr>
-        <td style="border-top: 1px dotted;"><span>退勤時間</span></td>
-        <td style="border-top: 1px dotted;"><span>退勤理由</span></td>
-      </tr> -->
     </tbody>
   </table>
 </template>
@@ -74,14 +64,83 @@ type Data = {
 const names = ref<string[]>([]);
 const data = ref<Data>({})
 
+// 2024年11月29日	近藤駿一		19:43	"recog
+// "
+// 2024年12月02日	近藤駿一	9:49		
+// 2024年12月20日	萌々子清水萌々子	10:04		打刻遅くなりました！10:00です
+// 2024年12月20日	萌々子清水萌々子		19:01	
+// 2024年12月25日	萌々子清水萌々子	10:30		"JR東海の遅延のため
+// ▼証明書
+// https://traininfo.jr-central.co.jp/zairaisen/delay_certificate.html?date=2024-12-25&line=10001&time=2"
+// 2024年12月25日	萌々子清水萌々子		19:01	
+// 2024年12月27日	萌々子清水萌々子	10:37		体調不良で遅刻しました。
+// 2025年1月10日	萌々子清水萌々子		19:00	
+
 const handleChangeTextarea = (e: Event) => {
   const target = e.target as HTMLTextAreaElement;
   const value = target.value;
 
   data.value = {} as Data;
-  names.value = [];
 
-  const lines = value.split('\n');
+  const __lines = value.split('\n');
+
+  // コメントが改行されている場合の対応
+  // if value of each line is not starting date format(yyyy年m月dd日\t) string, append to previous line and remove the line
+  for (let i = 0; i < __lines.length; i++) {
+    if (!__lines[i].match(/^\d{4}年\d{1,2}月\d{1,2}日\t/)) {
+      __lines[i - 1] += __lines[i];
+      __lines.splice(i, 1);
+      i--;
+    }
+  }
+  
+  const _lines = __lines.map((line) => {
+    const data = line.split('\t');
+    const date = new Date(data[0].replace('年', '-').replace('月', '-').replace('日', ''));
+    const name = data[1];
+    const inTime = toValue(data[2]);
+    const outTime = toValue(data[3]);
+    const note = toValue(data[4]);
+    return {
+      date,
+      name,
+      inTime,
+      outTime,
+      note,
+    };
+  });
+
+  names.value = Array.from(new Set(_lines.map((line) => line.name)));
+
+  // generate dates from min to max
+  const minDate = new Date(Math.min(..._lines.map((line) => line.date.getTime())));
+  const maxDate = new Date(Math.max(..._lines.map((line) => line.date.getTime())));
+  const datesArray = generateDateStrRange(getFormattedDate(minDate), getFormattedDate(maxDate));
+
+  // arrenge lines for filling empty data
+  const lines = datesArray.map((date) => {
+    const sameDateLines = _lines.filter((line) => getFormattedDate(line.date) === date);
+    if (sameDateLines.length === 0) {
+      return names.value.map((name) => {
+        return {
+          date: date,
+          name: name,
+          inTime: undefined,
+          outTime: undefined,
+          note: undefined,
+        }
+      });
+    }
+    return sameDateLines.map((line) => {
+      return {
+        date: getFormattedDate(line.date),
+        name: line.name,
+        inTime: line.inTime,
+        outTime: line.outTime,
+        note: line.note,
+      }
+    });
+  }).flat();
 
   // sep by tab
   // head1 head2 head3 head4 head5 (head1=date, head2=name, head3=inTime, head4=outTime, head5=note)
@@ -93,17 +152,13 @@ const handleChangeTextarea = (e: Event) => {
   // 2025年1月15日	勝田麻美	9:04		フォームのエラーで打刻遅れました
   // 2025年1月15日	三井健史	9:19		
   // 2025年1月15日	萌々子清水萌々子	9:51		
-  lines.forEach((line) => {
-    const items = line.split('\t');
-    const date = items[0];
-    const name = items[1];
-    const inTime = toValue(items[2]);
-    const outTime = toValue(items[3]);
-    const note = toValue(items[4]);
 
-    if (!names.value.includes(name)) {
-      names.value.push(name);
-    }
+  lines.forEach((line) => {
+    const date = line.date;
+    const name = line.name;
+    const inTime = line.inTime;
+    const outTime = line.outTime;
+    const note = line.note;
 
     if (!data.value[date]) {
       data.value[date] = {};
@@ -147,12 +202,37 @@ const handleChangeTextarea = (e: Event) => {
 };
 
 const toValue = (value: string | undefined) => {
-  if(value == '' || value == undefined) {
+  if (value == '' || value == undefined) {
     return undefined;
   }
   return value;
 };
 
+const getFormattedDate = (date: Date | undefined): string => {
+  if (!date) return "";
+  const YYYY = String(date.getFullYear());
+  const MM = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${YYYY}/${MM}/${dd}`; // 2022/08/25
+};
+
+const generateDateStrRange = (
+  startDateStr: string | undefined,
+  endDateStr: string | undefined,
+) => {
+  if (!startDateStr || !endDateStr) return [];
+  const dateRange = [];
+  const currentDate = new Date(startDateStr);
+  const endDate = new Date(endDateStr);
+
+  while (currentDate <= endDate) {
+    const dateStr = getFormattedDate(currentDate);
+    dateRange.push(dateStr);
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  return dateRange;
+}
 </script>
 
 <style scoped>
@@ -166,12 +246,13 @@ table {
   border: 1px solid #000
 }
 
-th{
+th {
   border: 1px solid #000;
   padding: .5rem;
   min-width: 75px;
 }
-td{
+
+td {
   border-left: 1px solid #000;
   border-right: 1px solid #000;
   padding: .5rem;
